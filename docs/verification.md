@@ -8,4 +8,4 @@ Verified locally on Node 22.19.
 - Package export/build inspection and npm packaging dry run: passed.
 - Provider adapter checked with injected HTTP responses; no live provider credentials required.
 
-CI targets Node 22 and 24. Node 24 has not been verified on this local host. No live-model memory-quality benchmark or large-history performance qualification is claimed.
+GitHub CI passed on Node 22 and 24. Local verification used Node 22.19. No live-model memory-quality benchmark or large-history performance qualification is claimed.
