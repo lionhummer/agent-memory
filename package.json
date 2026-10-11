@@ -1,0 +1,46 @@
+{
+  "name": "@lionhummer/agent-memory",
+  "version": "0.1.0",
+  "description": "Framework-independent agent memory with provenance, scoped facts and bounded recall",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./sqlite": {
+      "types": "./dist/sqlite.d.ts",
+      "import": "./dist/sqlite.js"
+    },
+    "./openai": {
+      "types": "./dist/openai.d.ts",
+      "import": "./dist/openai.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "test": "node --import tsx --test --test-concurrency=1 test/*.test.ts",
+    "example": "node --import tsx examples/quickstart.ts",
+    "example:sqlite": "node --import tsx examples/sqlite.ts",
+    "check": "npm run typecheck && npm test && npm run build",
+    "example:openai": "node --import tsx examples/openai.ts",
+    "format": "prettier --write src test examples README.md docs",
+    "format:check": "prettier --check src test examples README.md docs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "prettier": "^3.6.0"
+  }
+}
