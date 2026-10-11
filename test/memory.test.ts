@@ -487,3 +487,129 @@ test("identity entity-key drift cannot fork a user's identity", async () => {
     2,
   );
 });
+
+test("caller mutations during extraction cannot change scope or trusted attribution", async () => {
+  let entered!: () => void, finish!: () => void;
+  const started = new Promise<void>((r) => {
+    entered = r;
+  });
+  const gate = new Promise<void>((r) => {
+    finish = r;
+  });
+  const c = { ...context },
+    messages = [message()];
+  const engine = new AgentMemory({
+    store: new InMemoryStore(),
+    extract: async () => {
+      entered();
+      await gate;
+      return decision();
+    },
+  });
+  const operation = engine.ingest({
+    operationId: "immutable",
+    context: c,
+    messages,
+  });
+  await started;
+  c.projectId = "elsewhere";
+  messages[0]!.author.id = "mallory";
+  messages[0]!.id = "spoof";
+  finish();
+  assert.equal((await operation).stored.length, 1);
+  assert.equal((await engine.list(context))[0]?.sources[0]?.authorId, "alice");
+  assert.equal((await engine.list(c)).length, 0);
+});
+
+test("invalid optional scopes and timer overflow are rejected", async () => {
+  for (const n of [2_147_483_648, Number.MAX_SAFE_INTEGER])
+    assert.throws(
+      () =>
+        new AgentMemory({
+          store: new InMemoryStore(),
+          extract: async () => decision(),
+          timeoutMs: n,
+        }),
+      /timer range/,
+    );
+  const f = fixture();
+  for (const workspaceId of ["", " ", 5])
+    await assert.rejects(
+      ingest(f.engine, "x", { ...context, workspaceId } as Context),
+      (e) => e instanceof Error && "code" in e && e.code === "INVALID",
+    );
+  assert.equal(f.calls(), 0);
+});
+
+test("finite large embeddings do not produce NaN ranking", async () => {
+  const f = fixture();
+  await ingest(f.engine);
+  const engine = new AgentMemory({
+    store: f.store,
+    extract: async () => decision(),
+    embed: async (texts) =>
+      texts.map(() => [Number.MAX_VALUE, Number.MAX_VALUE]),
+  });
+  const r = await engine.recall({ context, query: "database" });
+  assert.equal(r.retrieval, "semantic");
+  assert.ok(Number.isFinite(r.items[0]?.score));
+});
+
+test("lost commit acknowledgment is reconciled by stable operation identity", async () => {
+  const inner = new InMemoryStore();
+  let lose = true,
+    calls = 0;
+  const store: MemoryStore = {
+    load: (k) => inner.load(k),
+    compareAndSwap: async (k, r, s) => {
+      const committed = await inner.compareAndSwap(k, r, s);
+      if (lose) return new Promise(() => {});
+      return committed;
+    },
+  };
+  const engine = new AgentMemory({
+    store,
+    timeoutMs: 10,
+    extract: async () => {
+      calls++;
+      return decision();
+    },
+  });
+  await assert.rejects(
+    ingest(engine),
+    (e) => e instanceof Error && "code" in e && e.code === "INDETERMINATE",
+  );
+  lose = false;
+  assert.equal((await ingest(engine)).duplicate, true);
+  assert.equal((await engine.list(context)).length, 1);
+  assert.equal(calls, 1);
+});
+
+test("high contention retains 64 independent operations without repeating extraction", async () => {
+  let calls = 0;
+  const engine = new AgentMemory({
+    store: new InMemoryStore(),
+    maxRetries: 128,
+    extract: async () => {
+      calls++;
+      return decision();
+    },
+  });
+  await Promise.all(
+    Array.from({ length: 64 }, (_, i) => ingest(engine, `op-${i}`)),
+  );
+  assert.equal((await engine.list(context)).length, 64);
+  assert.equal(calls, 64);
+});
+
+test("snapshot and returned memory mutations do not alter storage", async () => {
+  const f = fixture();
+  await ingest(f.engine);
+  const rows = await f.engine.list(context);
+  rows[0]!.content = "changed";
+  const snapshot = await f.store.load(
+    JSON.stringify([context.tenantId, context.userId]),
+  );
+  snapshot.state.memories.length = 0;
+  assert.equal((await f.engine.list(context))[0]?.content, "We use Postgres");
+});

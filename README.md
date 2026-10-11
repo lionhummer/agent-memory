@@ -6,7 +6,7 @@ Keep session summaries separate from durable knowledge. Preserve where a fact ca
 
 Bring your model, storage, and optional embeddings. No agent framework or hosted memory service is required.
 
-> Development version: `@lionhummer/agent-memory` is a working local package name, not an npm release. Node 22.13+; ESM and TypeScript declarations. SQLite uses Node's built-in `node:sqlite`, which is experimental in Node 22. The core has no runtime npm dependencies.
+> Version 0.1.0, licensed MIT OR Apache-2.0. Node 22.13+; ESM and TypeScript declarations. SQLite uses Node's built-in `node:sqlite`, which is experimental in Node 22. The core has no runtime npm dependencies.
 
 ## The problem
 
@@ -33,12 +33,10 @@ npm run example
 
 The quickstart is deterministic and needs no API key. It demonstrates storage and recall; it is not a model-quality benchmark.
 
-For an adjacent application, build and install the local package:
+Install the release in your application:
 
 ```sh
-npm run build
-# Run in your application's directory:
-npm install ../agent-memory
+npm install @lionhummer/agent-memory
 ```
 
 ```ts
@@ -191,9 +189,12 @@ npm run check
 npm run format:check
 npm run example
 npm run example:sqlite
+npm run eval
 npm pack --dry-run
 ```
 
 Tests cover attribution, tenant/project boundaries, correction history, expiry, concurrent CAS, replay, bounded recall, embedding fallback, protected consolidation, and SQLite persistence. Provider-adapter tests use injected HTTP responses; no live model quality claim is made. CI targets Node 22 and 24.
 
 Read [design](docs/design.md), [adaptation](docs/adapting.md), and [release preparation](RELEASE.md).
+
+The seeded retrieval evaluation checks 32 known lexical queries and scope isolation. It uses ground-truth extraction and makes no model calls; its score does not measure extraction accuracy, paraphrase retrieval, or long-conversation quality.

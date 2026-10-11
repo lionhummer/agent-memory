@@ -2,7 +2,6 @@
   "name": "@lionhummer/agent-memory",
   "version": "0.1.0",
   "description": "Framework-independent agent memory with provenance, scoped facts and bounded recall",
-  "private": true,
   "type": "module",
   "engines": {
     "node": ">=22.13"
@@ -10,7 +9,10 @@
   "files": [
     "dist",
     "README.md",
-    "docs"
+    "docs",
+    "LICENSE-MIT",
+    "LICENSE-APACHE",
+    "CHANGELOG.md"
   ],
   "exports": {
     ".": {
@@ -34,8 +36,10 @@
     "example:sqlite": "node --import tsx examples/sqlite.ts",
     "check": "npm run typecheck && npm test && npm run build",
     "example:openai": "node --import tsx examples/openai.ts",
-    "format": "prettier --write src test examples README.md docs",
-    "format:check": "prettier --check src test examples README.md docs"
+    "format": "prettier --write src test examples README.md docs eval",
+    "format:check": "prettier --check src test examples README.md docs eval",
+    "eval": "node --import tsx eval/retrieval.ts",
+    "prepublishOnly": "npm run check && npm run format:check && npm run eval"
   },
   "devDependencies": {
     "@types/node": "^22.19.0",
@@ -46,5 +50,16 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/lionhummer/agent-memory.git"
-  }
+  },
+  "license": "MIT OR Apache-2.0",
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "agent",
+    "memory",
+    "provenance",
+    "sqlite",
+    "retrieval"
+  ]
 }

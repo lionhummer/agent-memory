@@ -8,7 +8,7 @@ Host-provided author identities and conversation origin are trusted inputs. Extr
 
 ## Ingestion
 
-Validate messages and stable input identity, then load the user's snapshot. Completed operations short-circuit. Reject oversized windows; fit existing memories into the remaining extraction-input budget. Call the extractor under a deadline. Runtime-validate its output rather than relying on TypeScript or provider schema support alone.
+Snapshot caller context and messages before any asynchronous work. Validate messages and stable input identity, then load the user's snapshot. Completed operations short-circuit. Reject oversized windows; fit existing memories into the remaining extraction-input budget. Call the extractor under a deadline. Runtime-validate its output rather than relying on TypeScript or provider schema support alone.
 
 Candidates are applied against the current snapshot. Policy determines category scope and upsert behavior. A replacement must target live records in the same exact scope/category. Facts, summary and processed-operation identity commit together through CAS. A concurrent writer causes a reapplication of candidates against a refreshed snapshot. The model is not called again during CAS retry. Replacements that became stale are reported as rejected candidates.
 
@@ -31,3 +31,5 @@ An optional consolidator receives a bounded category/scope chunk. Validate every
 ## Scope of version one
 
 No background scheduler, automatic summary condensation, indexed vector search, shared cross-user workspace facts, human approval UI, archival policy, or accuracy benchmark is included. These remain host responsibilities or future extensions. Regression tests establish observable policy/concurrency behavior; they do not measure long-conversation recall quality.
+
+Timer configuration is bounded by JavaScript’s signed 32-bit timer range. Embedding vectors are limited to 65,536 dimensions and normalized before cosine scoring to avoid numeric overflow.

@@ -63,10 +63,15 @@ export const DEFAULT_POLICIES: Readonly<Record<Category, Policy>> = {
 const estimate = (text: string): number => Math.ceil(text.length / 4);
 function assertContext(c: Context): void {
   if (
+    !c ||
+    typeof c !== "object" ||
     ![c.tenantId, c.userId, c.threadId].every(
       (v) => typeof v === "string" && v.trim().length > 0,
     ) ||
     !["human", "agent", "group"].includes(c.origin) ||
+    [c.workspaceId, c.projectId].some(
+      (v) => v !== undefined && (typeof v !== "string" || !v.trim()),
+    ) ||
     (c.projectId && !c.workspaceId)
   )
     throw new MemoryError(
@@ -121,6 +126,7 @@ function lexical(a: string, b: string): number {
 function cosine(a: readonly number[], b: readonly number[]): number {
   if (
     !a.length ||
+    a.length > 65536 ||
     a.length !== b.length ||
     ![...a, ...b].every(Number.isFinite)
   )
@@ -128,12 +134,15 @@ function cosine(a: readonly number[], b: readonly number[]): number {
       "MODEL_OUTPUT",
       "Embedding vectors must have matching dimensions and finite values",
     );
+  const scaleA = Math.max(...a.map(Math.abs)),
+    scaleB = Math.max(...b.map(Math.abs));
+  if (!scaleA || !scaleB) return 0;
   let dot = 0,
     aa = 0,
     bb = 0;
   for (let i = 0; i < a.length; i++) {
-    const x = a[i] ?? 0,
-      y = b[i] ?? 0;
+    const x = (a[i] ?? 0) / scaleA,
+      y = (b[i] ?? 0) / scaleB;
     dot += x * y;
     aa += x * x;
     bb += y * y;
@@ -216,6 +225,14 @@ export class AgentMemory {
           "INVALID",
           "Limits must be positive safe integers",
         );
+    if (
+      this.opts.timeoutMs > 2_147_483_647 ||
+      this.opts.embeddingTimeoutMs > 2_147_483_647
+    )
+      throw new MemoryError(
+        "INVALID",
+        "Timeout exceeds the JavaScript timer range",
+      );
     this.policies = structuredClone({
       ...DEFAULT_POLICIES,
       ...options.policies,
@@ -288,8 +305,18 @@ export class AgentMemory {
     messages: readonly import("./types.js").Message[];
     signal?: AbortSignal;
   }): Promise<IngestResult> {
+    input = {
+      ...input,
+      context: structuredClone(input.context),
+      messages: structuredClone(input.messages),
+    };
     const storeKey = key(input.context);
-    if (!input.operationId.trim() || !input.messages.length)
+    if (
+      typeof input.operationId !== "string" ||
+      !input.operationId.trim() ||
+      !Array.isArray(input.messages) ||
+      !input.messages.length
+    )
       throw new MemoryError(
         "INVALID",
         "A stable operationId and messages are required",
@@ -297,9 +324,13 @@ export class AgentMemory {
     const ids = new Set<string>();
     for (const m of input.messages) {
       if (
-        !m.id ||
+        !m ||
+        typeof m.id !== "string" ||
+        !m.id.trim() ||
         ids.has(m.id) ||
-        !m.author.id ||
+        !m.author ||
+        typeof m.author.id !== "string" ||
+        !m.author.id.trim() ||
         !["human", "agent", "tool", "system"].includes(m.author.kind) ||
         typeof m.content !== "string" ||
         !Number.isFinite(Date.parse(m.timestamp))
@@ -351,6 +382,7 @@ export class AgentMemory {
       input.signal,
     );
     this.validateExtraction(extraction);
+    const candidates = structuredClone(extraction);
     for (let attempt = 0; attempt < this.opts.maxRetries; attempt++) {
       throwIfAborted(input.signal);
       const snapshot = attempt === 0 ? initial : await this.load(storeKey);
@@ -360,7 +392,7 @@ export class AgentMemory {
         stored: string[] = [],
         rejected: IngestResult["rejected"] = [];
       const now = this.now();
-      extraction.facts.forEach((candidate, index) => {
+      candidates.facts.forEach((candidate, index) => {
         const outcome = this.persist(
           candidate,
           input.context,
@@ -372,11 +404,11 @@ export class AgentMemory {
           rejected.push({ index, reason: outcome });
         else stored.push(outcome.id);
       });
-      if (extraction.summary?.trim())
+      if (candidates.summary?.trim())
         state.summaries.push({
           id: randomUUID(),
           threadId: input.context.threadId,
-          content: extraction.summary,
+          content: candidates.summary,
           sourceMessageIds: input.messages.map((m) => m.id),
           ...(input.context.workspaceId
             ? { workspaceId: input.context.workspaceId }
@@ -547,6 +579,9 @@ export class AgentMemory {
     limit?: number;
     signal?: AbortSignal;
   }): Promise<RecallResult> {
+    input = { ...input, context: structuredClone(input.context) };
+    if (typeof input.query !== "string")
+      throw new MemoryError("INVALID", "Recall query must be a string");
     const tokenBudget = input.tokenBudget ?? 4000,
       limit = input.limit ?? 30;
     if (
@@ -652,6 +687,7 @@ export class AgentMemory {
     category: Category;
     signal?: AbortSignal;
   }): Promise<{ merged: number; deleted: number }> {
+    input = { ...input, context: structuredClone(input.context) };
     if (!this.opts.consolidate)
       throw new MemoryError("INVALID", "No consolidator configured");
     if (
@@ -664,7 +700,7 @@ export class AgentMemory {
       );
     const storeKey = key(input.context),
       now = this.now();
-    if (!input.operationId.trim())
+    if (typeof input.operationId !== "string" || !input.operationId.trim())
       throw new MemoryError(
         "INVALID",
         "Consolidation needs a stable operationId",
